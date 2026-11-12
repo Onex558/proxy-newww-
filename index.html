@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proxy</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0f0f13;
+      color: white;
+      font-family: system-ui, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    #bar {
+      display: flex;
+      gap: 8px;
+      padding: 12px;
+      background: #16161e;
+      border-bottom: 1px solid #222;
+    }
+    #url {
+      flex: 1;
+      padding: 12px 16px;
+      font-size: 15px;
+      border: none;
+      border-radius: 10px;
+      background: #1c1c24;
+      color: white;
+      outline: none;
+    }
+    button {
+      padding: 0 18px;
+      border: none;
+      border-radius: 10px;
+      background: #3b82f6;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #frame-container {
+      flex: 1;
+      position: relative;
+    }
+    #status {
+      padding: 8px 16px;
+      font-size: 13px;
+      color: #888;
+      background: #12121a;
+    }
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <input id="url" placeholder="Enter URL or search..." autofocus>
+    <button onclick="go()">Go</button>
+  </div>
+  <div id="status">Starting...</div>
+  <div id="frame-container"></div>
+
+  <script>
+    const WISP_SERVERS = [
+      "wss://wisp.mercurywork.shop/",
+      "wss://anura.pro/",
+      "wss://wisp.reallyarsh.xyz/",
+      "wss://wisp.gointospace.app/",
+      "wss://glseries.net/wisp/"
+    ];
+
+    const statusEl = document.getElementById("status");
+    const urlInput = document.getElementById("url");
+    const container = document.getElementById("frame-container");
+
+    function setStatus(msg) {
+      statusEl.textContent = msg;
+    }
+
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error("Failed to load " + src));
+        document.head.appendChild(s);
+      });
+    }
+
+    async function start() {
+      try {
+        setStatus("Loading Scramjet...");
+        await loadScript("https://cdn.jsdelivr.net/gh/Onex558/proxy-aka-static@main/baremux/index.js");
+        await loadScript("https://cdn.jsdelivr.net/gh/Onex558/proxy-aka-static@main/scram/scramjet.all.js");
+
+        if (typeof $scramjetLoadController !== "function") {
+          throw new Error("$scramjetLoadController is not defined");
+        }
+
+        const { ScramjetController } = $scramjetLoadController();
+
+        const scramjet = new ScramjetController({
+          files: {
+            wasm: "https://cdn.jsdelivr.net/gh/Onex558/proxy-aka-static@main/scram/scramjet.wasm.wasm",
+            all:  "https://cdn.jsdelivr.net/gh/Onex558/proxy-aka-static@main/scram/scramjet.all.js",
+            sync: "https://cdn.jsdelivr.net/gh/Onex558/proxy-aka-static@main/scram/scramjet.sync.js"
+          }
+        });
+
+        await scramjet.init();
+
+        setStatus("Connecting to Wisp...");
+        const connection = new BareMux.BareMuxConnection(
+          "https://cdn.jsdelivr.net/gh/Onex558/proxy-aka-static@main/baremux/worker.js"
+        );
+
+        let connected = false;
+        for (const wisp of WISP_SERVERS) {
+          try {
+            await connection.setTransport(
+              "https://cdn.jsdelivr.net/gh/Onex558/proxy-aka-static@main/epoxy/index.mjs",
+              [{ wisp }]
+            );
+            connected = true;
+            break;
+          } catch (e) {}
+        }
+
+        if (!connected) throw new Error("All Wisp servers failed");
+
+        const frame = scramjet.createFrame();
+        container.appendChild(frame.frame);
+        window.sjFrame = frame;
+
+        setStatus("Ready");
+        urlInput.focus();
+      } catch (err) {
+        console.error(err);
+        setStatus("Error: " + err.message);
+      }
+    }
+
+    function go() {
+      let val = urlInput.value.trim();
+      if (!val || !window.sjFrame) return;
+
+      if (val.includes(".") && !val.includes(" ")) {
+        if (!val.startsWith("http")) val = "https://" + val;
+      } else {
+        val = "https://duckduckgo.com/?q=" + encodeURIComponent(val);
+      }
+      window.sjFrame.go(val);
+    }
+
+    urlInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") go();
+    });
+
+    start();
+  </script>
+</body>
+</html>
